@@ -3,12 +3,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 from datetime import datetime
 
-from flask import Flask
-from config import GEMINI_API_KEY, GEMINI_API_URL
-import requests
-
-GEMINI_API_KEY = "AIzaSyCq2ayJ_paj3pxngOTTFLVWViL_frkzJ2Q"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com"
+from flask import Flask, render_template, request, jsonify
+from gemini_integration import generate_content
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
@@ -30,9 +26,29 @@ with app.app_context():
 def index():
     return render_template('index.html')
 
-@app.route('/conjugation')
+@app.route('/conjugation', methods=["POST"])
 def conjugation():
-    return render_template('conjugation.html')
+    data = request.get_json()
+    verb = data["verb"]
+    tense = data["tense"]
+
+    # Get conjugation help from Gemini integration
+    conjugation_help = get_conjugation_help(verb, tense)
+
+    # Return the result as JSON
+    return jsonify({"result": conjugation_help})
+
+def get_conjugation_help(verb: str, tense: str):
+    """
+    Get conjugation help for a verb in a specific tense using Gemini API.
+    """
+    prompt = f"Conjugate the verb '{verb}' in the {tense} tense in French. Provide examples."
+    conjugation_help = generate_content(prompt)
+    
+    if conjugation_help:
+        return conjugation_help
+    else:
+        return "Sorry, we couldn't generate conjugation help at this time."
 
 @app.route('/worksheet')
 def worksheet():

@@ -26,39 +26,36 @@ with app.app_context():
 def index():
     return render_template('index.html')
 
-@app.route('/conjugation', methods=["POST"])
+@app.route('/conjugation', methods=["GET", "POST"])
 def conjugation():
-    data = request.get_json()
-    verb = data["verb"]
-    tense = data["tense"]
+    if request.method == "POST":
+        # Get the verb and tense from the form
+        verb = request.form["verb"]
+        tense = request.form["tense"]
 
-    # Get conjugation help from Gemini integration
-    conjugation_help = get_conjugation_help(verb, tense)
+        # Call the function to get conjugation help
+        conjugation_help = get_conjugation_help(verb, tense)
 
-    # Return the result as JSON
-    return jsonify({"result": conjugation_help})
+        # Return the conjugation help to be displayed
+        return render_template("index.html", conjugation_result=conjugation_help)
+
+    # GET request, just render the form without result
+    return render_template("index.html")
 
 def get_conjugation_help(verb: str, tense: str):
-    """
-    Get conjugation help for a verb in a specific tense using Gemini API.
-    """
-    prompt = f"Conjugate the verb '{verb}' in the {tense} tense in French. Provide examples."
-    conjugation_help = generate_content(prompt)
-    
-    if conjugation_help:
-        return conjugation_help
-    else:
-        return "Sorry, we couldn't generate conjugation help at this time."
+    # This function should generate conjugation help using your logic or API
+    # For demonstration purposes, we're returning a dummy string
+    return f"The verb '{verb}' in {tense} tense is conjugated as: [Example Conjugation]."
 
-@app.route('/worksheet')
+@app.route('/worksheet', methods=["POST"])
 def worksheet():
     return render_template('conjugation.html')
 
-@app.route('/practice')
+@app.route('/practice', methods=["POST"])
 def practice():
     return render_template('conjugation.html')
 
-@app.route('/lessons')
+@app.route('/lessons', methods=["POST"])
 def lessons():
     return render_template('conjugation.html')
 

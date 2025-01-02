@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - Conji{% endblock %}
+
+{% block content %}
+    <h1>Welcome to Conji!</h1>
+    <p>Select a tool to get started:</p>
+    <div class="button-group">
+        <a href="{{ url_for('conjugation') }}" class="button">Conjugation Tool</a>
+        <a href="{{ url_for('worksheet') }}" class="button">Worksheets</a>
+        <a href="{{ url_for('practice') }}" class="button">Practice Questions</a>
+        <a href="{{ url_for('lessons') }}" class="button">Tense Help</a>
+    </div>
+{% endblock %}

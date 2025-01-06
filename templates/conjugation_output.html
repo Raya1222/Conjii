@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <title>Conji - Conjugation Result</title>
+</head>
+<body>
+    <h1>Conji - Conjugation Result</h1>
+    <p><strong>Verb:</strong> {{ verb }}</p>
+    <p><strong>Tense:</strong> {{ tense }}</p>
+    <p><strong>Conjugated Form:</strong> {{ conjugation_result }}</p>
+    <a href="/">Try another conjugation</a>
+</body>
+</html>

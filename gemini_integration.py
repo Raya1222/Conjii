@@ -1,11 +1,15 @@
 import google.generativeai as genai
-import os
+import json
 
 # Configure Gemini with your API key
 def configure_gemini():
-    #api_key = os.getenv("GENAI_API_KEY")  # Ensure your API key is set in your environment variables
-    api_key = "AIzaSyCq2ayJ_paj3pxngOTTFLVWViL_frkzJ2Q"
-    genai.configure(api_key=api_key)
+    with open('data.json', 'r') as file:
+        data = json.load(file)
+
+    # Access the value of 'gemini_api'
+    gemini_api_value = data['info']['gemini_api']
+
+    genai.configure(api_key=gemini_api_value)
 
 # Generate content based on a prompt
 def generate_content(prompt: str):

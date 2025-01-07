@@ -1,7 +1,74 @@
 from flask import Flask, render_template, request, url_for
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from gemini_integration import generate_content
+
+# DATABASE CODE
+import sqlite3
+
+def initializeDB():
+    connection = sqlite3.connect("conjii.db")
+    cursor = connection.cursor()
+
+    table_query = """
+        CREATE TABLE IF NOT EXISTS worksheet (
+            id INTEGER PRIMARY KEY NOT NULL,
+            date TEXT NOT NULL,
+            verb TEXT NOT NULL,
+            tense TEXT NOT NULL,
+            conjugation_result TEXT NOT NULL
+        );
+    """
+
+    result = cursor.execute(table_query)
+    connection.commit()
+    cursor.close()
+    connection.close()
+# end of initializeDB
+
+def add_data(verb="", tense="", result=""):
+    # Get the current date
+    current_date = datetime.now()
+
+    # Format the date as YYYY/MM/DD
+    formatted_date = current_date.strftime("%Y/%m/%d")
+
+    connection = sqlite3.connect("conjii.db")
+    cursor = connection.cursor()
+
+    record_id = None
+
+    # Check if the table has no records, then id will be 0
+    if cursor.execute("SELECT COUNT(*) FROM worksheet;").fetchone()[0] == 0:
+        record_id = 0
+    else:
+        # If the table has records, we take the last ID and increase it by one.
+        record_id = cursor.execute("SELECT id FROM worksheet ORDER BY id DESC LIMIT 1;").fetchone()[0] + 1
+    
+    insert_query = """
+        INSERT INTO worksheet (id, date, verb, tense, conjugation_result)
+        VALUES (?, ?, ?, ?, ?);
+    """
+    print(formatted_date, record_id)
+
+    cursor.execute(insert_query, (record_id, formatted_date, verb, tense, result))
+    connection.commit()
+    cursor.close()
+    connection.close()
+# end of add_data()
+
+def get_data():
+    # get_data() returns a list of tuples
+    connection = sqlite3.connect("conjii.db")
+    cursor = connection.cursor()
+
+    get_query = """SELECT * FROM worksheet;"""
+    result = cursor.execute(get_query).fetchall()
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return result
+# END OF DATABASE CODE
 
 app = Flask(__name__)
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
@@ -22,6 +89,9 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
+    initializeDB()
+    print(get_data())
+    #add_data(verb="manger", tense="present", result="test")
     return render_template('index.html')
 
 @app.route('/conjugation', methods=['POST','GET'])

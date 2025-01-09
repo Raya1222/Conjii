@@ -3,7 +3,7 @@ import json
 
 # Configure Gemini with your API key
 def configure_gemini():
-    with open('data.json', 'r') as file:
+    with open("SECRET.json", 'r') as file:
         data = json.load(file)
 
     # Access the value of 'gemini_api'

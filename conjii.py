@@ -71,21 +71,6 @@ def get_data():
 # END OF DATABASE CODE
 
 app = Flask(__name__)
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
-# db = SQLAlchemy(app)
-
-# class Conjugations(db.Model):
-    # id = db.Column(db.Integer, primary_key=True)
-    # verb = db.Column(db.String(100), nullable=False)
-    # tense = db.Column(db.String(50), nullable=False)
-    # conjugation_result = db.Column(db.Text, nullable=False)
-    # data_created = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # def __repr__(self):
-    #     return f'<Conjugation {self.id}>'
-
-# with app.app_context():
-#     db.create_all()
 
 @app.route('/')
 def index():
@@ -94,66 +79,44 @@ def index():
     #add_data(verb="manger", tense="present", result="test")
     return render_template('index.html')
 
-@app.route('/conjugation', methods=['POST','GET'])
-#def conjugation_result():
+@app.route('/conjugation', methods=['POST', 'GET'])
 def conjugation():
     if request.method == "POST":
         # Get verb and tense from the form
-        verb1 = request.form.get("verb", "")
-        tense1 = request.form.get("tense", "")
-
-        #print(db)
+        verb = request.form.get("verb", "")
+        tense = request.form.get("tense", "")
 
         try:
-            prompt = f"Conjugate the verb '{verb1}' in the {tense1} tense."
-            conjugation_help = repr(generate_content(prompt))
+            # Generate the conjugation result using Gemini
+            prompt = f"Conjugate the verb '{verb}' in the {tense} tense."
+            conjugation_result = generate_content(prompt)
         except Exception as e:
-            conjugation_help = f"Error generating content: {e}"
-        
-        print(conjugation_help)
+            conjugation_result = f"Error generating content: {e}"
 
-        # new_conjugation = Conjugations(verb=verb1, tense=tense1, conjugation_result=conjugation_help)
-        # db.session.add(new_conjugation)
-        # db.session.commit()
+        # Save the result to the database
+        add_data(verb=verb, tense=tense, result=conjugation_result)
 
-        # Placeholder: Add logic to conjugate the verb based on the tense
-        # For now, let's assume we have a function `conjugate_verb`
-        #result = conjugate_verb(verb1, tense1)
+        # Retrieve the stored data (to confirm it saved correctly or fetch it again)
+        connection = sqlite3.connect("conjii.db")
+        cursor = connection.cursor()
+        query = """
+            SELECT conjugation_result FROM worksheet
+            WHERE verb = ? AND tense = ?
+            ORDER BY id DESC LIMIT 1;
+        """
+        cursor.execute(query, (verb, tense))
+        db_result = cursor.fetchone()
+        cursor.close()
+        connection.close()
 
-        #Example result for demonstration purposes
-        result = f"Conjugated form of '{verb1}' in '{tense1}' tense."
+        # Use the stored result
+        stored_result = db_result[0] if db_result else conjugation_result
 
-        # Render the output page with the result
-        return render_template("conjugation_output.html", verb=verb1, tense=tense1, result=result)
+        # Render the output page with the stored result
+        return render_template("conjugation_output.html", verb=verb, tense=tense, result=stored_result)
 
     # Render the input page if the method is GET
     return render_template("conjugation_input.html")
-
-    # if request.method == "POST":
-    #     verb = request.form.get("verb", "")
-    #     tense = request.form.get("tense", "")
-    #     print(verb, tense)
-    #     return render_template()
-    # return render_template("conjugation_input.html")
-
-
-    # if request.method == "POST":
-    #     verb = request.form.get("verb", "")
-    #     tense = request.form.get("tense", "")
-
-    #     try:
-    #         prompt = f"Conjugate the verb '{verb}' in the {tense} tense."
-    #         conjugation_help = generate_content(prompt)
-    #     except Exception as e:
-    #         conjugation_help = f"Error generating content: {e}"
-
-    #     new_conjugation = Conjugations(verb=verb, tense=tense, conjugation_result=conjugation_help)
-    #     db.session.add(new_conjugation)
-    #     db.session.commit()
-
-    #     return render_template("conjugation_output.html", verb=verb, tense=tense, conjugation_result=conjugation_help)
-    #else:
-    #    return render_template("conjugation_output.html", verb=verb, tense=tense, conjugation_result=conjugation_help)
 
 @app.route('/worksheet')
 def worksheet():

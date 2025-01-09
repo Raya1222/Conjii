@@ -4,13 +4,87 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <title>Conji - Conjugation Result</title>
+    <title>Conjugation Result</title>
+    <style>
+        /* Additional styles for the table */
+        .result-container {
+            background: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px 30px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+
+        th {
+            background-color: #fce4ec;
+            color: #333;
+        }
+
+        td {
+            background-color: #f9f9f9;
+            white-space: pre-line; /* Allows line breaks in text */
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 30px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 20px;
+            font-size: 18px;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .back-link:hover {
+            background-color: #0056b3;
+            transform: scale(1.05);
+        }
+    </style>
 </head>
 <body>
-    <h1>Conji - Conjugation Result</h1>
-    <p><strong>Verb:</strong> {{ verb }}</p>
-    <p><strong>Tense:</strong> {{ tense }}</p>
-    <p><strong>Conjugated Form:</strong> {{ conjugation_result }}</p>
-    <a href="/">Try another conjugation</a>
+    <div class="container">
+        <h1 class="header">Conjugation Result</h1>
+        <div class="result-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Verb</th>
+                        <th>Tense</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ verb }}</td>
+                        <td>{{ tense }}</td>
+                        <td>
+                            {% for line in result.split('\n') %}
+                                {{ line }}<br>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <a class="back-link" href="/conjugation">Back to Conjugation</a>
+        </div>
+    </div>
 </body>
 </html>
+
+

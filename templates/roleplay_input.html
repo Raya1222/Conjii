@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Roleplay — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('index') }}" class="back">&larr; Home</a>
+    <p class="eyebrow">iv. Roleplay</p>
+    <h2>Speak it <em>aloud.</em></h2>
+    <p class="lede">Set a scene, then hold a real spoken conversation in French. The conversation keeps going until you press stop.</p>
+
+    <form method="POST" action="{{ url_for('roleplay') }}" enctype="multipart/form-data" class="form" data-loading="Setting the scene&hellip;">
+        <div class="field">
+            <span class="label">Mode</span>
+            <div class="modes">
+                <label class="mode">
+                    <input type="radio" name="mode" value="scripted" checked>
+                    <span class="card">
+                        <strong>Scripted</strong>
+                        <small>You get a written dialogue. The AI reads its lines, you read yours aloud — and see how accurately you pronounced each word.</small>
+                    </span>
+                </label>
+                <label class="mode">
+                    <input type="radio" name="mode" value="unscripted">
+                    <span class="card">
+                        <strong>Unscripted</strong>
+                        <small>No script. Think on your feet — say whatever you like and the AI responds to exactly what you said.</small>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="scenario">Scenario</label>
+            <input type="text" class="input" id="scenario" name="scenario" placeholder="e.g. Ordering at a café in Paris" required>
+            <div class="chips" style="margin-top:14px">
+                {% for s in ['Ordering at a café', 'Checking into a hotel', 'Asking for directions', 'A job interview', 'Meeting a new friend', 'At the doctor'] %}
+                <button type="button" class="chip suggestion" data-value="{{ s }}" style="background:none;border:0;padding:0"><span>{{ s }}</span></button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="field">
+            <span class="label">Level</span>
+            <div class="chips">
+                <label class="chip"><input type="radio" name="level" value="beginner"><span>Beginner</span></label>
+                <label class="chip"><input type="radio" name="level" value="intermediate" checked><span>Intermediate</span></label>
+                <label class="chip"><input type="radio" name="level" value="advanced"><span>Advanced</span></label>
+            </div>
+        </div>
+
+        <details class="optional">
+            <summary>Class vocabulary</summary>
+            <div class="inner">
+                <div class="field">
+                    <label for="custom_topics">Words or grammar to use</label>
+                    <textarea class="textarea" id="custom_topics" name="custom_topics" rows="3" placeholder="e.g. formal vs informal greetings, the conditionnel&hellip;"></textarea>
+                </div>
+                <div class="field">
+                    <label for="syllabus_pdf">Class materials <span class="muted">(PDF)</span></label>
+                    <input class="file" type="file" id="syllabus_pdf" name="syllabus_pdf" accept=".pdf">
+                </div>
+            </div>
+        </details>
+
+        <div><button type="submit" class="btn">Set the scene</button></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.querySelectorAll(".suggestion").forEach(b => {
+        b.addEventListener("click", () => {
+            document.getElementById("scenario").value = b.dataset.value;
+        });
+    });
+</script>
+{% endblock %}

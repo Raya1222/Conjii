@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block title %}Your worksheet — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <div class="page-head no-print">
+        <div>
+            <p class="eyebrow">ii. Worksheets</p>
+            <h2>Your <em>worksheet.</em></h2>
+        </div>
+        <div class="actions">
+            <button onclick="window.print()" class="btn ghost sm">Print</button>
+            <a href="{{ url_for('worksheet') }}" class="btn sm">New worksheet</a>
+        </div>
+    </div>
+
+    <div id="raw" class="hidden">{{ response }}</div>
+    <article id="out" class="prose"></article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    const out = document.getElementById("out");
+    out.innerHTML = marked.parse(document.getElementById("raw").textContent);
+
+    // Attach subtle listen buttons to vocabulary items so students can hear the French pronunciation
+    out.querySelectorAll("li").forEach(li => {
+        const raw = li.textContent.trim();
+        if (!raw) return;
+        const frenchPart = raw.split(/\s*[-–—:]\s*/)[0].replace(/___+/g, "").trim();
+        if (!frenchPart) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "replay no-print";
+        btn.title = "Listen in French";
+        btn.textContent = "♪";
+        btn.addEventListener("click", () => window.ConjiiVoice.speak(frenchPart));
+        li.appendChild(btn);
+    });
+</script>
+{% endblock %}

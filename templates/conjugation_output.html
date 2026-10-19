@@ -1,90 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <title>Conjugation Result</title>
-    <style>
-        /* Additional styles for the table */
-        .result-container {
-            background: #ffffff;
-            border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            padding: 20px 30px;
-            max-width: 600px;
-            width: 100%;
-            text-align: center;
-        }
+{% extends 'base.html' %}
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
+{% block title %}{{ verb }} — Conjii{% endblock %}
 
-        th, td {
-            padding: 10px;
-            border: 1px solid #ddd;
-            text-align: center;
-        }
-
-        th {
-            background-color: #fce4ec;
-            color: #333;
-        }
-
-        td {
-            background-color: #f9f9f9;
-            white-space: pre-line; /* Allows line breaks in text */
-        }
-
-        .back-link {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 12px 30px;
-            background-color: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 20px;
-            font-size: 18px;
-            transition: background-color 0.3s, transform 0.3s;
-        }
-
-        .back-link:hover {
-            background-color: #0056b3;
-            transform: scale(1.05);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1 class="header">Conjugation Result</h1>
-        <div class="result-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Verb</th>
-                        <th>Tense</th>
-                        <th>Result</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>{{ verb }}</td>
-                        <td>{{ tense }}</td>
-                        <td>
-                            {% for line in result.split('\n') %}
-                                {{ line }}<br>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <a class="back-link" href="/conjugation">Back to Conjugation</a>
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('conjugation') }}" class="back">&larr; Another verb</a>
+    <div class="page-head">
+        <div>
+            <p class="eyebrow">{{ tense }}</p>
+            <h1><em>{{ verb }}</em></h1>
+        </div>
+        <div class="actions">
+            <button type="button" class="btn ghost sm" id="speak-verb-btn">Listen to verb</button>
+            <button type="button" class="btn sm" id="speak-all-btn">Read all forms</button>
         </div>
     </div>
-</body>
-</html>
 
+    <div id="raw" class="hidden">{{ result }}</div>
+    <div id="out" class="prose"></div>
+</div>
+{% endblock %}
 
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    const out = document.getElementById("out");
+    out.innerHTML = marked.parse(document.getElementById("raw").textContent);
+
+    // Add a subtle listen button to each conjugation row
+    const rows = out.querySelectorAll("tbody tr");
+    const rowPhrases = [];
+    rows.forEach(tr => {
+        const cells = tr.querySelectorAll("td");
+        if (cells.length >= 2) {
+            const pronoun = cells[0].textContent.trim();
+            const form = cells[1].textContent.trim();
+            const phrase = (pronoun.split("/")[0].trim() + " " + form).replace(/^je\s+([aeiouéèêàâùûîïœh])/i, "j'$1");
+            rowPhrases.push(phrase);
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "replay";
+            btn.title = "Listen";
+            btn.textContent = "♪";
+            btn.addEventListener("click", () => window.ConjiiVoice.speak(phrase));
+            cells[1].appendChild(btn);
+        }
+    });
+
+    document.getElementById("speak-verb-btn").addEventListener("click", () => {
+        window.ConjiiVoice.speak({{ verb|tojson }});
+    });
+
+    document.getElementById("speak-all-btn").addEventListener("click", () => {
+        const text = rowPhrases.length ? rowPhrases.join(", ") : {{ verb|tojson }};
+        window.ConjiiVoice.speak(text);
+    });
+</script>
+{% endblock %}

@@ -2,18 +2,208 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">  <!-- Corrected -->
-    <meta http-equiv="X-UA-Compatible" content="ie=edge"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Conjii{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <title>{% block title %}Conji{% endblock %}</title>
-
-    {% block head %} {% endblock %}
+    {% block head %}{% endblock %}
 </head>
 <body>
-    
+    <header class="site-header">
+        <a href="{{ url_for('index') }}" class="wordmark">Conj<span>ii</span></a>
+        <nav class="site-nav">
+            {% set ep = request.endpoint %}
+            <a href="{{ url_for('conjugation') }}" class="{{ 'active' if ep == 'conjugation' }}">Conjugate</a>
+            <a href="{{ url_for('worksheet') }}" class="{{ 'active' if ep == 'worksheet' }}">Worksheets</a>
+            <a href="{{ url_for('practice') }}" class="{{ 'active' if ep == 'practice' }}">Practice</a>
+            <a href="{{ url_for('roleplay') }}" class="{{ 'active' if ep == 'roleplay' }}">Roleplay</a>
+            <a href="{{ url_for('dictee') }}" class="{{ 'active' if ep == 'dictee' }}">Dict&eacute;e</a>
+        </nav>
+    </header>
+
     <main>
         {% block content %}{% endblock %}
     </main>
-    
+
+    <footer class="site-footer">
+        <span>Conjii</span>
+        <label class="voice-picker" title="Choose the AI voice used across the website">
+            <span>Voice:</span>
+            <select id="global-voice-select" aria-label="AI Voice">
+                <option value="Aoede">Aoede (Warm)</option>
+                <option value="Kore">Kore (Clear)</option>
+                <option value="Charon">Charon (Deep)</option>
+                <option value="Leda">Leda (Gentle)</option>
+                <option value="Puck">Puck (Lively)</option>
+            </select>
+        </label>
+        <span>Apprendre, doucement.</span>
+    </footer>
+
+    <div class="loading" id="loading">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <p id="loading-text">Un instant&hellip;</p>
+    </div>
+
+    <script>
+        // Show a quiet loading overlay on any form marked data-loading
+        document.querySelectorAll("form[data-loading]").forEach(function (form) {
+            form.addEventListener("submit", function () {
+                document.getElementById("loading-text").textContent = form.dataset.loading;
+                document.getElementById("loading").classList.add("show");
+            });
+        });
+        // Hide overlay when navigating back (bfcache)
+        window.addEventListener("pageshow", function () {
+            document.getElementById("loading").classList.remove("show");
+        });
+
+        /* =====================================================================
+           ConjiiVoice — Human-like AI voice engine for all website components
+           Uses Gemini TTS (/api/tts) with client-side blob caching & fallback.
+           ===================================================================== */
+        (function () {
+            const voiceSelect = document.getElementById("global-voice-select");
+            const savedVoice = localStorage.getItem("conjii_voice") || "Aoede";
+            if (voiceSelect) {
+                voiceSelect.value = savedVoice;
+                voiceSelect.addEventListener("change", function () {
+                    localStorage.setItem("conjii_voice", voiceSelect.value);
+                });
+            }
+
+            const audioCache = new Map();
+            let activeAudio = null;
+            let activeController = null;
+            let activeResolve = null;
+            let fallbackVoice = null;
+
+            function pickFallbackVoice() {
+                if (!window.speechSynthesis) return;
+                const voices = speechSynthesis.getVoices();
+                // Prefer premium/natural/neural French voices when falling back
+                fallbackVoice =
+                    voices.find(v => v.lang && v.lang.startsWith("fr") && /natural|neural|premium|enhanced|amélie|thomas|audrey|aurélie|google/i.test(v.name)) ||
+                    voices.find(v => v.lang === "fr-FR") ||
+                    voices.find(v => v.lang && v.lang.startsWith("fr")) ||
+                    null;
+            }
+            if (window.speechSynthesis) {
+                pickFallbackVoice();
+                speechSynthesis.onvoiceschanged = pickFallbackVoice;
+            }
+
+            function stop() {
+                if (activeController) {
+                    try { activeController.abort(); } catch (e) {}
+                    activeController = null;
+                }
+                if (activeAudio) {
+                    try {
+                        activeAudio.pause();
+                        activeAudio.currentTime = 0;
+                    } catch (e) {}
+                    activeAudio = null;
+                }
+                if (window.speechSynthesis) {
+                    try { speechSynthesis.cancel(); } catch (e) {}
+                }
+                if (activeResolve) {
+                    const r = activeResolve;
+                    activeResolve = null;
+                    r();
+                }
+            }
+
+            function fallbackSpeak(text, rate) {
+                return new Promise(function (resolve) {
+                    if (!window.speechSynthesis) return resolve();
+                    activeResolve = resolve;
+                    const u = new SpeechSynthesisUtterance(text);
+                    u.lang = "fr-FR";
+                    u.rate = rate || 0.92;
+                    if (fallbackVoice) u.voice = fallbackVoice;
+                    let settled = false;
+                    const done = function () {
+                        if (settled) return;
+                        settled = true;
+                        if (activeResolve === resolve) activeResolve = null;
+                        resolve();
+                    };
+                    u.onend = done;
+                    u.onerror = done;
+                    setTimeout(done, 2000 + text.length * 110);
+                    speechSynthesis.speak(u);
+                });
+            }
+
+            async function speak(text, opts) {
+                opts = opts || {};
+                const clean = String(text || "").replace(/[*#_`~]/g, "").trim();
+                if (!clean) return;
+
+                stop();
+
+                const voice = opts.voice || (voiceSelect ? voiceSelect.value : savedVoice) || "Aoede";
+                const slow = !!opts.slow || (opts.rate && opts.rate < 0.85);
+                const rate = opts.rate || (slow ? 0.88 : 1.0);
+                const style = opts.style || "";
+                const key = [clean, voice, slow ? "slow" : "norm", style].join("|");
+
+                try {
+                    let blobUrl = audioCache.get(key);
+                    if (!blobUrl) {
+                        activeController = new AbortController();
+                        const res = await fetch("{{ url_for('tts_endpoint') }}", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ text: clean, voice: voice, slow: slow, style: style }),
+                            signal: activeController.signal
+                        });
+                        activeController = null;
+                        if (!res.ok) throw new Error("TTS HTTP " + res.status);
+                        const blob = await res.blob();
+                        blobUrl = URL.createObjectURL(blob);
+                        audioCache.set(key, blobUrl);
+                    }
+
+                    return await new Promise(function (resolve, reject) {
+                        activeResolve = resolve;
+                        const audio = new Audio(blobUrl);
+                        activeAudio = audio;
+                        audio.playbackRate = rate;
+                        const finish = function () {
+                            if (activeAudio === audio) activeAudio = null;
+                            if (activeResolve === resolve) activeResolve = null;
+                            resolve();
+                        };
+                        audio.onended = finish;
+                        audio.onerror = function (err) {
+                            if (activeAudio === audio) activeAudio = null;
+                            if (activeResolve === resolve) activeResolve = null;
+                            reject(err);
+                        };
+                        audio.play().catch(reject);
+                    });
+                } catch (err) {
+                    if (err && err.name === "AbortError") return;
+                    return await fallbackSpeak(clean, slow ? 0.78 : 0.92);
+                }
+            }
+
+            window.ConjiiVoice = {
+                speak: speak,
+                stop: stop,
+                getVoice: function () { return (voiceSelect && voiceSelect.value) || savedVoice; },
+                setVoice: function (v) {
+                    if (voiceSelect) voiceSelect.value = v;
+                    localStorage.setItem("conjii_voice", v);
+                }
+            };
+        })();
+    </script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

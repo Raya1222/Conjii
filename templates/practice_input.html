@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block title %}Practice — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('index') }}" class="back">&larr; Home</a>
+    <p class="eyebrow">iii. Practice</p>
+    <h2>Practice, <em>your way.</em></h2>
+    <p class="lede">Pick a topic, how many questions you'd like, and the kinds of questions you want to answer.</p>
+
+    <form method="POST" action="{{ url_for('practice') }}" enctype="multipart/form-data" class="form" id="practice-form" data-loading="Writing your questions&hellip;">
+        <div class="field">
+            <label for="practice_focus">Topic</label>
+            <input type="text" class="input" id="practice_focus" name="practice_focus" placeholder="e.g. passé composé with être, food vocabulary" required>
+        </div>
+
+        <div class="field">
+            <span class="label">Question types</span>
+            <div class="chips">
+                {% for value, label in question_types %}
+                <label class="chip">
+                    <input type="checkbox" name="question_types" value="{{ value }}" {{ 'checked' if value in ['fill_blank', 'multiple_choice'] }}>
+                    <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="hint" id="types-hint">Choose at least one. Questions will be mixed across your selection.</p>
+        </div>
+
+        <div class="row">
+            <div class="field">
+                <span class="label">Number of questions</span>
+                <div class="stepper">
+                    <button type="button" data-step="-1" aria-label="Fewer">&minus;</button>
+                    <input type="number" id="num_questions" name="num_questions" value="10" min="1" max="{{ max_questions }}">
+                    <button type="button" data-step="1" aria-label="More">+</button>
+                </div>
+                <p class="hint">Between 1 and {{ max_questions }}.</p>
+            </div>
+            <div class="field">
+                <span class="label">Difficulty</span>
+                <div class="chips">
+                    <label class="chip"><input type="radio" name="level" value="beginner"><span>Beginner</span></label>
+                    <label class="chip"><input type="radio" name="level" value="intermediate" checked><span>Intermediate</span></label>
+                    <label class="chip"><input type="radio" name="level" value="advanced"><span>Advanced</span></label>
+                </div>
+            </div>
+        </div>
+
+        <details class="optional">
+            <summary>More options</summary>
+            <div class="inner">
+                <div class="field">
+                    <label for="timer_minutes">Timer <span class="muted">(minutes)</span></label>
+                    <input type="number" class="input" id="timer_minutes" name="timer_minutes" placeholder="No time limit" min="1" max="60">
+                </div>
+                <div class="field">
+                    <label for="custom_topics">Class notes</label>
+                    <textarea class="textarea" id="custom_topics" name="custom_topics" rows="3" placeholder="e.g. Unit 4 vocabulary, focus on travel words&hellip;"></textarea>
+                </div>
+                <div class="field">
+                    <label for="syllabus_pdf">Worksheet or syllabus <span class="muted">(PDF)</span></label>
+                    <input class="file" type="file" id="syllabus_pdf" name="syllabus_pdf" accept=".pdf">
+                </div>
+            </div>
+        </details>
+
+        <div><button type="submit" class="btn">Generate practice</button></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Stepper buttons
+    const num = document.getElementById("num_questions");
+    document.querySelectorAll(".stepper button").forEach(b => {
+        b.addEventListener("click", () => {
+            const v = (parseInt(num.value) || 0) + parseInt(b.dataset.step);
+            num.value = Math.min(Math.max(v, 1), parseInt(num.max));
+        });
+    });
+
+    // Require at least one question type
+    document.getElementById("practice-form").addEventListener("submit", function (e) {
+        if (!this.querySelector('input[name="question_types"]:checked')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            const hint = document.getElementById("types-hint");
+            hint.style.color = "var(--accent)";
+            hint.textContent = "Please choose at least one question type.";
+        }
+    }, true);
+</script>
+{% endblock %}

@@ -1,16 +1,51 @@
 {% extends 'base.html' %}
 
-{% block title %}Home - Conji{% endblock %}
+{% block title %}Conjii — French, beautifully practised{% endblock %}
 
 {% block content %}
-    <div class="container">
-        <h1 class="header">Welcome to Conji!</h1>
-        <p class="intro-text">Select a tool to get started:</p>
-        <div class="button-group">
-            <a href="{{ url_for('conjugation') }}" class="button">Conjugation Tool</a>
-            <a href="{{ url_for('worksheet') }}" class="button">Worksheets</a>
-            <a href="{{ url_for('practice') }}" class="button">Practice Questions</a>
-            <a href="{{ url_for('lessons') }}" class="button">Tense Help</a>
-        </div>
-    </div>
+<div class="page">
+    <section class="hero">
+        <p class="eyebrow">Your French study companion</p>
+        <h1>Parlez<br>avec <em>aisance.</em></h1>
+        <p class="lede">Conjugate, study, drill, converse and transcribe — five quiet tools to help your French feel natural.</p>
+    </section>
+
+    <ul class="tools">
+        <li>
+            <a href="{{ url_for('conjugation') }}">
+                <span class="num">i.</span>
+                <span><span class="name">Conjugation</span><span class="desc">Any verb, any tense, instantly.</span></span>
+                <span class="arrow">&rarr;</span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('worksheet') }}">
+                <span class="num">ii.</span>
+                <span><span class="name">Worksheets</span><span class="desc">Printable study guides tailored to your class.</span></span>
+                <span class="arrow">&rarr;</span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('practice') }}">
+                <span class="num">iii.</span>
+                <span><span class="name">Practice</span><span class="desc">Choose how many questions, and which kinds.</span></span>
+                <span class="arrow">&rarr;</span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('roleplay') }}">
+                <span class="num">iv.</span>
+                <span><span class="name">Roleplay</span><span class="desc">Speak aloud — scripted or spontaneous.</span></span>
+                <span class="arrow">&rarr;</span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('dictee') }}">
+                <span class="num">v.</span>
+                <span><span class="name">Dict&eacute;e</span><span class="desc">Listen in French and write it down — typed or on paper.</span></span>
+                <span class="arrow">&rarr;</span>
+            </a>
+        </li>
+    </ul>
+</div>
 {% endblock %}

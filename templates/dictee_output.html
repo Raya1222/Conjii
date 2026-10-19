@@ -1,0 +1,420 @@
+{% extends 'base.html' %}
+
+{% block title %}Dictée — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('dictee') }}" class="back">&larr; New dict&eacute;e</a>
+    <p class="eyebrow">v. Dict&eacute;e &middot; {{ level|capitalize }}</p>
+    <h2><em>{{ title or topic }}</em></h2>
+
+    {% if error %}
+        <div class="notice" style="margin-top:32px">{{ error }}</div>
+        <a href="{{ url_for('dictee') }}" class="btn ghost">Try again</a>
+    {% else %}
+
+    <!-- Audio Deck -->
+    <div class="dictee-deck">
+        <div class="stage-bar" style="position:static;padding-top:0">
+            <div class="status" id="audio-status">
+                <span class="pulse"></span>
+                <span id="audio-status-text">Ready — press play to listen</span>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn sm" id="play-all-btn">Play full dict&eacute;e</button>
+                <button type="button" class="btn sm ghost" id="play-slow-btn">Read full slowly</button>
+                <button type="button" class="btn sm ghost hidden" id="stop-audio-btn">Stop audio</button>
+            </div>
+        </div>
+
+        <div class="sentence-bar">
+            <div class="sentence-nav">
+                <button type="button" class="btn sm ghost" id="prev-sent-btn" aria-label="Previous sentence">&larr;</button>
+                <span class="sentence-label" id="sent-indicator">Sentence 1 of {{ sentences|length }}</span>
+                <button type="button" class="btn sm ghost" id="next-sent-btn" aria-label="Next sentence">&rarr;</button>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn sm ghost" id="play-sent-btn">Play sentence</button>
+                <button type="button" class="btn sm ghost" id="play-sent-slow-btn">Slowly</button>
+            </div>
+        </div>
+        <div class="progress"><i id="sent-progress"></i></div>
+    </div>
+
+    <!-- Submission Mode Tabs: Type vs Upload Photo of Paper -->
+    <div class="field" style="margin-top:40px">
+        <span class="label">How are you writing your dict&eacute;e?</span>
+        <div class="modes">
+            <label class="mode">
+                <input type="radio" name="entry_mode" value="type" checked>
+                <span class="card">
+                    <strong>Type here</strong>
+                    <small>Write what you hear directly in the text box below.</small>
+                </span>
+            </label>
+            <label class="mode">
+                <input type="radio" name="entry_mode" value="upload">
+                <span class="card">
+                    <strong>Write on paper &amp; upload photo</strong>
+                    <small>Write by hand in your notebook, then snap or upload a picture of your page to be graded.</small>
+                </span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Option 1: Typed input -->
+    <div id="type-pane" style="margin-top:28px">
+        <div class="accent-bar" aria-label="French accent helpers">
+            {% for ch in ['é', 'è', 'ê', 'ë', 'à', 'â', 'ù', 'û', 'ç', 'œ', 'î', 'ï', '«', '»'] %}
+            <button type="button" class="accent-key" data-char="{{ ch }}">{{ ch }}</button>
+            {% endfor %}
+        </div>
+        <textarea class="textarea dictee-sheet" id="student-text" rows="6" placeholder="Écrivez ici tout ce que vous entendez en français&hellip;" spellcheck="false" autocomplete="off"></textarea>
+    </div>
+
+    <!-- Option 2: Handwritten photo upload -->
+    <div id="upload-pane" class="hidden" style="margin-top:28px">
+        <label class="dropzone" id="dropzone" for="handwriting-file">
+            <input type="file" id="handwriting-file" accept="image/*" class="hidden">
+            <div id="dropzone-prompt">
+                <p class="display" style="font-size:28px;margin-bottom:6px">Upload a photo of your handwritten page</p>
+                <p class="muted small" style="margin:0">Click to choose a photo (or take a picture on your phone/tablet) &middot; JPG, PNG, WEBP, HEIC</p>
+            </div>
+            <div id="preview-wrap" class="hidden">
+                <img id="preview-img" alt="Preview of your handwritten dictée" class="handwriting-preview">
+                <p class="muted small" id="preview-name" style="margin:10px 0 0"></p>
+            </div>
+        </label>
+        <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn ghost sm hidden" id="clear-photo-btn">Remove photo</button>
+        </div>
+    </div>
+
+    <div class="notice hidden" id="submit-error" style="margin-top:24px"></div>
+
+    <div class="actions" style="margin-top:36px">
+        <button type="button" class="btn" id="grade-btn">Grade my dict&eacute;e</button>
+        <a href="{{ url_for('dictee') }}" class="btn ghost">Start another</a>
+    </div>
+
+    <!-- Grading Results -->
+    <section class="summary" id="results-section" style="margin-top:48px">
+        <div class="score show" style="padding-top:16px">
+            <p class="eyebrow">Your dict&eacute;e score</p>
+            <div class="big"><span id="score-val">0</span><small>%</small></div>
+            <p class="muted small" id="score-caption"></p>
+        </div>
+
+        <div id="transcribed-box" class="hidden" style="margin:32px 0">
+            <p class="eyebrow">What we read from your handwritten page</p>
+            <blockquote class="dictee-quote" id="transcribed-text"></blockquote>
+        </div>
+
+        <div style="margin:32px 0">
+            <p class="eyebrow">Word-by-word check</p>
+            <div class="script-line" style="margin:12px 0 0">
+                <div class="fr" id="diff-output" style="font-size:26px"></div>
+                <p class="muted small" style="margin:14px 0 0">Green words matched; underlined bordeaux words had a spelling, accent, or word difference.</p>
+            </div>
+        </div>
+
+        <div style="margin:32px 0">
+            <div class=" style-row" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+                <p class="eyebrow" style="margin-bottom:8px">Original French passage</p>
+                <button type="button" class="btn ghost sm" onclick="playFull(false)">Listen again</button>
+            </div>
+            <div class="script-line" style="margin:8px 0 0">
+                <div class="fr" id="reveal-fr" style="font-size:26px"></div>
+                <div class="en" id="reveal-en" style="margin-top:12px"></div>
+            </div>
+        </div>
+
+        <div id="mistakes-wrap" class="hidden" style="margin:32px 0">
+            <p class="eyebrow">Corrections &amp; notes</p>
+            <div id="mistakes-list"></div>
+        </div>
+
+        <div style="margin:32px 0">
+            <p class="eyebrow">Teacher's feedback</p>
+            <div class="prose" id="teacher-feedback"></div>
+        </div>
+    </section>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if not error %}
+<script>
+const DICTEE = {
+    sessionId: {{ session_id|tojson }},
+    level: {{ level|tojson }},
+    fullText: {{ full_text|tojson }},
+    englishTranslation: {{ english_translation|tojson }},
+    sentences: {{ sentences|tojson }},
+    gradeUrl: "{{ url_for('dictee_grade') }}"
+};
+
+const $ = id => document.getElementById(id);
+let currentIdx = 0;
+
+function setAudioStatus(state, text) {
+    $("audio-status").className = "status " + state;
+    $("audio-status-text").textContent = text;
+    $("stop-audio-btn").classList.toggle("hidden", !state);
+}
+
+function updateSentenceUI() {
+    const total = DICTEE.sentences.length || 1;
+    $("sent-indicator").textContent = `Sentence ${currentIdx + 1} of ${total}`;
+    $("prev-sent-btn").disabled = currentIdx <= 0;
+    $("next-sent-btn").disabled = currentIdx >= total - 1;
+    $("sent-progress").style.width = ((currentIdx + 1) / total * 100) + "%";
+}
+
+async function playFull(slow) {
+    setAudioStatus("speaking", slow ? "Reading full dictée slowly…" : "Reading full dictée…");
+    await window.ConjiiVoice.speak(DICTEE.fullText, {
+        slow: slow,
+        rate: slow ? 0.85 : 0.96,
+        style: slow
+            ? "native French teacher, speaking slowly, clearly, and distinctly for dictation"
+            : "warm, natural native French speaker reading a passage clearly"
+    });
+    setAudioStatus("", "Ready");
+}
+
+async function playCurrentSentence(slow) {
+    const s = DICTEE.sentences[currentIdx];
+    if (!s) return;
+    setAudioStatus("speaking", `Reading sentence ${currentIdx + 1}${slow ? " slowly" : ""}…`);
+    await window.ConjiiVoice.speak(s.fr, {
+        slow: slow,
+        rate: slow ? 0.84 : 0.95,
+        style: slow
+            ? "native French teacher, speaking slowly and articulating every word for dictation"
+            : "warm, natural native French speaker"
+    });
+    setAudioStatus("", `Sentence ${currentIdx + 1} finished`);
+}
+
+$("play-all-btn").addEventListener("click", () => playFull(false));
+$("play-slow-btn").addEventListener("click", () => playFull(true));
+$("stop-audio-btn").addEventListener("click", () => {
+    window.ConjiiVoice.stop();
+    setAudioStatus("", "Stopped");
+});
+$("prev-sent-btn").addEventListener("click", () => {
+    if (currentIdx > 0) { currentIdx--; updateSentenceUI(); playCurrentSentence(false); }
+});
+$("next-sent-btn").addEventListener("click", () => {
+    if (currentIdx < DICTEE.sentences.length - 1) { currentIdx++; updateSentenceUI(); playCurrentSentence(false); }
+});
+$("play-sent-btn").addEventListener("click", () => playCurrentSentence(false));
+$("play-sent-slow-btn").addEventListener("click", () => playCurrentSentence(true));
+
+updateSentenceUI();
+
+/* Entry mode toggle: Type vs Upload handwritten page */
+let entryMode = "type";
+document.querySelectorAll('input[name="entry_mode"]').forEach(r => {
+    r.addEventListener("change", () => {
+        entryMode = r.value;
+        $("type-pane").classList.toggle("hidden", entryMode !== "type");
+        $("upload-pane").classList.toggle("hidden", entryMode !== "upload");
+        $("submit-error").classList.add("hidden");
+    });
+});
+
+/* Accent helper buttons */
+document.querySelectorAll(".accent-key").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const ta = $("student-text");
+        const start = ta.selectionStart || 0;
+        const end = ta.selectionEnd || 0;
+        const ch = btn.dataset.char;
+        ta.value = ta.value.slice(0, start) + ch + ta.value.slice(end);
+        ta.focus();
+        ta.setSelectionRange(start + ch.length, start + ch.length);
+    });
+});
+
+/* Handwritten image preview */
+const fileInput = $("handwriting-file");
+fileInput.addEventListener("change", () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        $("preview-img").src = e.target.result;
+        $("preview-name").textContent = file.name;
+        $("dropzone-prompt").classList.add("hidden");
+        $("preview-wrap").classList.remove("hidden");
+        $("clear-photo-btn").classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+});
+
+$("clear-photo-btn").addEventListener("click", () => {
+    fileInput.value = "";
+    $("preview-img").src = "";
+    $("dropzone-prompt").classList.remove("hidden");
+    $("preview-wrap").classList.add("hidden");
+    $("clear-photo-btn").classList.add("hidden");
+});
+
+/* Word alignment for visual diff (strict on accents so dictée spelling shows clearly) */
+function cleanTokens(s) {
+    return String(s || "").toLowerCase()
+        .replace(/[’`]/g, "'")
+        .replace(/[.,!?;:«»"()\-–—…]/g, " ")
+        .split(/\s+/).filter(Boolean);
+}
+
+function alignExact(targetWords, studentWords) {
+    const a = targetWords, b = studentWords;
+    const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i--)
+        for (let j = b.length - 1; j >= 0; j--)
+            dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const hit = new Array(a.length).fill(false);
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { hit[i] = true; i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+        else j++;
+    }
+    return hit;
+}
+
+function renderDiff(targetText, studentText) {
+    const container = $("diff-output");
+    container.innerHTML = "";
+    const targetTokens = cleanTokens(targetText);
+    const studentTokens = cleanTokens(studentText);
+    const hits = alignExact(targetTokens, studentTokens);
+
+    let k = 0;
+    targetText.split(/(\s+)/).forEach(chunk => {
+        if (/^\s+$/.test(chunk)) {
+            container.appendChild(document.createTextNode(chunk));
+            return;
+        }
+        const toks = cleanTokens(chunk);
+        const span = document.createElement("span");
+        span.className = "w";
+        span.textContent = chunk;
+        if (toks.length) {
+            const slice = hits.slice(k, k + toks.length);
+            k += toks.length;
+            span.classList.add(slice.every(Boolean) ? "hit" : "miss");
+        }
+        container.appendChild(span);
+    });
+}
+
+/* Submit for grading */
+$("grade-btn").addEventListener("click", async () => {
+    const errEl = $("submit-error");
+    errEl.classList.add("hidden");
+
+    const fd = new FormData();
+    fd.append("session_id", DICTEE.sessionId || "");
+    fd.append("target_text", DICTEE.fullText);
+    fd.append("level", DICTEE.level);
+    fd.append("mode", entryMode);
+
+    if (entryMode === "upload") {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            errEl.textContent = "Please select or take a photo of your handwritten page first.";
+            errEl.classList.remove("hidden");
+            return;
+        }
+        fd.append("handwriting_image", file);
+    } else {
+        const typed = $("student-text").value.trim();
+        if (!typed) {
+            errEl.textContent = "Please write what you heard before grading.";
+            errEl.classList.remove("hidden");
+            return;
+        }
+        fd.append("student_text", typed);
+    }
+
+    const btn = $("grade-btn");
+    btn.disabled = true;
+    btn.textContent = entryMode === "upload" ? "Reading your handwriting & grading…" : "Grading your dictée…";
+
+    try {
+        const res = await fetch(DICTEE.gradeUrl, { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            throw new Error(data.error || "Grading failed. Please try again.");
+        }
+
+        const studentWritten = data.transcribed_text || $("student-text").value.trim();
+        const score = typeof data.score === "number" ? data.score : 0;
+
+        $("score-val").textContent = score;
+        $("score-caption").textContent =
+            score >= 95 ? "Excellent — quasi sans faute !" :
+            score >= 80 ? "Très bien — de solides bases." :
+            score >= 60 ? "Bon effort — voyez les corrections ci-dessous." :
+            "Continuez à pratiquer — écoutez de nouveau en lisant le texte.";
+
+        if (entryMode === "upload" && studentWritten) {
+            $("transcribed-text").textContent = studentWritten;
+            $("transcribed-box").classList.remove("hidden");
+        } else {
+            $("transcribed-box").classList.add("hidden");
+        }
+
+        renderDiff(DICTEE.fullText, studentWritten);
+        $("reveal-fr").textContent = DICTEE.fullText;
+        $("reveal-en").textContent = DICTEE.englishTranslation || "";
+
+        const mistakes = Array.isArray(data.mistakes) ? data.mistakes : [];
+        const mWrap = $("mistakes-wrap");
+        const mList = $("mistakes-list");
+        mList.innerHTML = "";
+        if (mistakes.length) {
+            mistakes.forEach(m => {
+                const item = document.createElement("div");
+                item.className = "feedback bad";
+                item.style.margin = "14px 0 0 0";
+                const v = document.createElement("span");
+                v.className = "verdict";
+                v.textContent = m.category || "Correction";
+                const line = document.createElement("div");
+                const sStrong = document.createElement("strong");
+                sStrong.textContent = m.student || "(omitted)";
+                const cStrong = document.createElement("strong");
+                cStrong.textContent = m.correct || "";
+                line.append(sStrong, document.createTextNode(" → "), cStrong);
+                const exp = document.createElement("div");
+                exp.className = "muted small";
+                exp.textContent = m.explanation || "";
+                item.append(v, line, exp);
+                mList.appendChild(item);
+            });
+            mWrap.classList.remove("hidden");
+        } else {
+            mWrap.classList.add("hidden");
+        }
+
+        $("teacher-feedback").textContent = data.feedback || "";
+        $("results-section").classList.add("show");
+        $("results-section").scrollIntoView({ behavior: "smooth" });
+    } catch (e) {
+        errEl.textContent = e.message || "Could not grade your dictée.";
+        errEl.classList.remove("hidden");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Grade my dictée";
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

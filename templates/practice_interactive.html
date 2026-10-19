@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+
+{% block title %}Practice — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <div class="page-head">
+        <div>
+            <p class="eyebrow">iii. Practice &middot; {{ topic }}</p>
+            <h2><span id="q-count">{{ questions|length }}</span> <em>questions.</em></h2>
+        </div>
+        <div class="quiz-meta">
+            <div id="timer-wrap" class="hidden">
+                <p class="eyebrow" style="margin-bottom:6px">Time left</p>
+                <div class="timer" id="timer">00:00</div>
+            </div>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="notice">{{ error }}</div>
+        <a href="{{ url_for('practice') }}" class="btn ghost">Try again</a>
+    {% else %}
+        <div class="score" id="score">
+            <p class="eyebrow">Your score</p>
+            <div class="big"><span id="score-n">0</span><small> / <span id="score-d">0</span></small></div>
+            <p class="muted small" id="score-msg"></p>
+        </div>
+
+        <div id="questions"></div>
+
+        <div class="actions" style="margin-top:48px">
+            <button id="check-btn" class="btn">Check answers</button>
+            <a href="{{ url_for('practice') }}" id="again-btn" class="btn ghost hidden">New practice</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const QUESTIONS = {{ questions|tojson }};
+    const TIMER_SECONDS = {{ timer|int }};
+    const SESSION_ID = {{ session_id|tojson }};
+    const TYPE_LABELS = {
+        fill_blank: "Fill in the blank",
+        multiple_choice: "Multiple choice",
+        true_false: "True or false",
+        short_answer: "Short answer",
+        translation: "Translation"
+    };
+
+    let timerInterval = null;
+    let graded = false;
+
+    // Normalise for lenient comparison: case, whitespace, curly quotes, trailing punctuation.
+    function norm(s) {
+        return String(s || "").toLowerCase().replace(/[’`]/g, "'").replace(/\s+/g, " ")
+            .replace(/^[\s.,!?;:]+|[\s.,!?;:]+$/g, "").trim();
+    }
+    // Same as norm() but also strips accents — used to accept "a" for "à" with a gentle note.
+    function bare(s) { return norm(s).normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+
+    function el(tag, cls, text) {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+    }
+
+    function build() {
+        const wrap = document.getElementById("questions");
+        if (!wrap) return;
+
+        QUESTIONS.forEach((q, i) => {
+            const block = el("div", "q");
+            block.dataset.index = i;
+
+            const head = el("div", "q-head");
+            const listenBtn = el("button", "replay", "♪");
+            listenBtn.type = "button";
+            listenBtn.title = "Listen in French";
+            listenBtn.onclick = () => {
+                const spoken = graded && q.type === "fill_blank"
+                    ? String(q.question).replace(/_{2,}/g, q.answer).replace(/\([^)]*\)/g, "")
+                    : String(q.question).replace(/_{2,}/g, "…").replace(/\([^)]*\)/g, "");
+                window.ConjiiVoice.speak(spoken);
+            };
+            head.append(el("span", "q-num", (i + 1) + "."), el("span", "q-type", TYPE_LABELS[q.type] || q.type), listenBtn);
+            block.append(head);
+
+            const text = el("p", "q-text");
+            const body = el("div", "q-body");
+
+            if (q.type === "fill_blank") {
+                // Split on the blank and insert an inline input
+                const parts = String(q.question).split(/_{2,}/);
+                parts.forEach((part, j) => {
+                    text.append(document.createTextNode(part));
+                    if (j < parts.length - 1) {
+                        const input = el("input", "blank");
+                        input.type = "text";
+                        input.autocomplete = "off";
+                        input.spellcheck = false;
+                        input.setAttribute("aria-label", "Answer " + (i + 1));
+                        input.addEventListener("input", () => {
+                            input.style.width = Math.max(120, input.value.length * 15 + 30) + "px";
+                        });
+                        text.append(input);
+                    }
+                });
+                if (parts.length === 1) {
+                    // Model forgot the blank — fall back to an input underneath
+                    const input = el("input", "input answer blank-fallback");
+                    input.placeholder = "Your answer";
+                    body.append(input);
+                }
+                block.append(text, body);
+            } else if (q.type === "multiple_choice" || q.type === "true_false") {
+                text.textContent = q.question;
+                const opts = el("div", "options");
+                const choices = q.type === "true_false" ? ["Vrai", "Faux"] : (q.options || []);
+                choices.forEach((opt, j) => {
+                    const lab = el("label", "option");
+                    const inp = document.createElement("input");
+                    inp.type = "radio";
+                    inp.name = "q" + i;
+                    inp.value = opt;
+                    const span = el("span");
+                    span.append(el("b", null, String.fromCharCode(65 + j)), document.createTextNode(opt));
+                    lab.append(inp, span);
+                    opts.append(lab);
+                });
+                body.append(opts);
+                block.append(text, body);
+            } else {
+                // short_answer / translation
+                text.textContent = q.question;
+                const ta = el("textarea", "textarea answer");
+                ta.rows = 2;
+                ta.placeholder = q.type === "translation" ? "Your translation" : "Votre réponse en français";
+                body.append(ta);
+                block.append(text, body);
+            }
+
+            wrap.append(block);
+        });
+
+        document.getElementById("score-d").textContent = QUESTIONS.length;
+    }
+
+    function getAnswer(block, q) {
+        if (q.type === "fill_blank") {
+            return Array.from(block.querySelectorAll(".blank, .blank-fallback")).map(i => i.value).join(" ");
+        }
+        if (q.type === "multiple_choice" || q.type === "true_false") {
+            const c = block.querySelector("input[type=radio]:checked");
+            return c ? c.value : "";
+        }
+        return block.querySelector("textarea").value;
+    }
+
+    function showFeedback(block, ok, lines) {
+        const fb = el("div", "feedback " + (ok ? "good" : "bad"));
+        fb.append(el("span", "verdict", ok ? "Correct" : "Not quite"));
+        lines.filter(Boolean).forEach(l => fb.append(el("div", null, l)));
+        block.append(fb);
+    }
+
+    async function check() {
+        if (graded) return;
+        graded = true;
+        clearInterval(timerInterval);
+
+        const btn = document.getElementById("check-btn");
+        btn.disabled = true;
+        btn.textContent = "Checking…";
+
+        let score = 0;
+        const openItems = [];
+
+        QUESTIONS.forEach((q, i) => {
+            const block = document.querySelector(`.q[data-index="${i}"]`);
+            const answer = getAnswer(block, q);
+            block.querySelectorAll("input, textarea").forEach(x => x.disabled = true);
+
+            if (q.type === "short_answer" || q.type === "translation") {
+                openItems.push({ index: i, question: q.question, type: q.type, expected: q.answer, answer: answer });
+                return;
+            }
+
+            let ok = norm(answer) === norm(q.answer);
+            let accentNote = null;
+            if (!ok && q.type === "fill_blank" && answer && bare(answer) === bare(q.answer)) {
+                ok = true;
+                accentNote = "Watch your accents: " + q.answer;
+            }
+            if (ok) score++;
+
+            if (q.type === "fill_blank") {
+                block.querySelectorAll(".blank").forEach(b => b.classList.add(ok ? "is-correct" : "is-wrong"));
+            } else {
+                block.querySelectorAll(".option").forEach(o => {
+                    const v = o.querySelector("input").value;
+                    if (norm(v) === norm(q.answer)) o.classList.add("is-correct");
+                    else if (o.querySelector("input").checked) o.classList.add("is-wrong");
+                });
+            }
+
+            showFeedback(block, ok, [
+                !ok ? "Answer: " + q.answer : accentNote,
+                q.explanation
+            ]);
+        });
+
+        // Short answers & translations are graded by the AI
+        if (openItems.length) {
+            try {
+                const res = await fetch("{{ url_for('practice_grade') }}", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ items: openItems })
+                });
+                const data = await res.json();
+                const results = data.results || [];
+                openItems.forEach((item, k) => {
+                    const r = results[k] || {};
+                    const ok = !!r.correct;
+                    if (ok) score++;
+                    const block = document.querySelector(`.q[data-index="${item.index}"]`);
+                    showFeedback(block, ok, [
+                        r.feedback,
+                        !ok ? "Model answer: " + item.expected : null
+                    ]);
+                });
+            } catch (err) {
+                openItems.forEach(item => {
+                    const block = document.querySelector(`.q[data-index="${item.index}"]`);
+                    showFeedback(block, false, ["Couldn't reach the grader — model answer: " + item.expected]);
+                });
+            }
+        }
+
+        document.getElementById("score-n").textContent = score;
+        const pct = score / QUESTIONS.length;
+        document.getElementById("score-msg").textContent =
+            pct === 1 ? "Parfait." : pct >= .8 ? "Très bien." : pct >= .5 ? "Pas mal — keep going." : "Courage — review and try again.";
+        document.getElementById("score").classList.add("show");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+
+        btn.classList.add("hidden");
+        document.getElementById("again-btn").classList.remove("hidden");
+
+        if (SESSION_ID) {
+            fetch("{{ url_for('practice_score') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: SESSION_ID, score: score })
+            }).catch(() => {});
+        }
+    }
+
+    function startTimer() {
+        let left = TIMER_SECONDS;
+        if (!(left > 0) || !document.getElementById("questions")) return;
+        const d = document.getElementById("timer");
+        document.getElementById("timer-wrap").classList.remove("hidden");
+        const render = () => {
+            d.textContent = String(Math.floor(left / 60)).padStart(2, "0") + ":" + String(left % 60).padStart(2, "0");
+            d.classList.toggle("low", left <= 30);
+        };
+        render();
+        timerInterval = setInterval(() => {
+            left--;
+            render();
+            if (left <= 0) {
+                clearInterval(timerInterval);
+                d.textContent = "Time";
+                check();
+            }
+        }, 1000);
+    }
+
+    build();
+    startTimer();
+    const cb = document.getElementById("check-btn");
+    if (cb) cb.addEventListener("click", check);
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Practice Results - Conjii{% endblock %}
+
+{% block head %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .response-box { background-color: white; padding: 40px; border-radius: 8px; border: 1px solid #dee2e6; font-size: 1.1rem; line-height: 1.6;}
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0 fw-bold text-primary">Your Practice Set</h2>
+        <a href="/practice" class="btn btn-outline-primary fw-bold shadow-sm">Try Another</a>
+    </div>
+
+    <!-- Hidden Raw Text for JS to read -->
+    <div id="ai-response-text" class="d-none">{{ response }}</div>
+    
+    <!-- Visible Formatted Output -->
+    <div id="formatted-response" class="response-box shadow-sm"></div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        let rawMarkdown = document.getElementById("ai-response-text").innerText;
+        document.getElementById("formatted-response").innerHTML = marked.parse(rawMarkdown);
+    });
+</script>
+{% endblock %}

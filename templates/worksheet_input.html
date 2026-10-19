@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Worksheets — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('index') }}" class="back">&larr; Home</a>
+    <p class="eyebrow">ii. Worksheets</p>
+    <h2>A study guide, <em>made for you.</em></h2>
+    <p class="lede">Vocabulary, a grammar point, exercises and an answer key — ready to print.</p>
+
+    <form method="POST" action="{{ url_for('worksheet') }}" enctype="multipart/form-data" class="form" data-loading="Composing your worksheet&hellip;">
+        <div class="field">
+            <span class="label">Level</span>
+            <div class="chips">
+                <label class="chip"><input type="radio" name="level" value="beginner"><span>Beginner</span></label>
+                <label class="chip"><input type="radio" name="level" value="intermediate" checked><span>Intermediate</span></label>
+                <label class="chip"><input type="radio" name="level" value="advanced"><span>Advanced</span></label>
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="custom_topics">Topics to include</label>
+            <textarea class="textarea" id="custom_topics" name="custom_topics" rows="3" placeholder="e.g. weather vocabulary, the imparfait&hellip;"></textarea>
+        </div>
+
+        <div class="field">
+            <label for="syllabus_pdf">Teacher's study guide <span class="muted">(PDF, optional)</span></label>
+            <input class="file" type="file" id="syllabus_pdf" name="syllabus_pdf" accept=".pdf">
+        </div>
+
+        <div><button type="submit" class="btn">Create worksheet</button></div>
+    </form>
+</div>
+{% endblock %}

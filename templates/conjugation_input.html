@@ -1,34 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <title>Conji - Conjugation Input</title>
-</head>
-<body>
-    <h1>Conji - Conjugation Input</h1>
-    <form action="/conjugation" method="POST">
-        <label for="verb">Verb:</label>
-        <input type="text" id="verb" name="verb" required>
-        <br>
-        <label for="tense">Tense:</label>
-        <select id="tense" name="tense" required>
-            <option value="Présent">Present</option>
-            <option value="Imparfait">Imparfait</option>
-            <option value="Futur simple">Futur</option>
-            <option value="Passé composé">Passé composé</option>
-            <option value="Plus-que-parfait">Plus-que-parfait</option>
-            <option value="Futur proche">Futur proche</option>
-            <option value="Conditionnel présent">Conditionnel présent</option>
-            <option value="Conditionnel passé">Conditionnel passé</option>
-            <option value="Participe présent">Participe présent</option>
-            <option value="Participe passé">Participe passé</option>
-            <option value="Subjonctif présent">Subjonctif présent</option>
-            <option value="Subjonctif passé ">Subjonctif passé</option>
-        </select>
-        <br>
-        <button type="submit">Conjugate</button>
+{% extends 'base.html' %}
+
+{% block title %}Conjugation — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('index') }}" class="back">&larr; Home</a>
+    <p class="eyebrow">i. Conjugation</p>
+    <h2>Any verb, <em>any tense.</em></h2>
+    <p class="lede">Type a French verb in its infinitive and choose a tense.</p>
+
+    <form action="{{ url_for('conjugation') }}" method="POST" class="form" data-loading="Conjugating&hellip;">
+        <div class="row">
+            <div class="field">
+                <label for="verb">Verb</label>
+                <input class="input" type="text" id="verb" name="verb" placeholder="e.g. aller" required autofocus>
+            </div>
+            <div class="field">
+                <label for="tense">Tense</label>
+                <select class="select" id="tense" name="tense" required>
+                    <option value="Présent">Présent</option>
+                    <option value="Imparfait">Imparfait</option>
+                    <option value="Futur simple">Futur simple</option>
+                    <option value="Passé composé">Passé composé</option>
+                    <option value="Plus-que-parfait">Plus-que-parfait</option>
+                    <option value="Futur proche">Futur proche</option>
+                    <option value="Conditionnel présent">Conditionnel présent</option>
+                    <option value="Conditionnel passé">Conditionnel passé</option>
+                    <option value="Participe présent">Participe présent</option>
+                    <option value="Participe passé">Participe passé</option>
+                    <option value="Subjonctif présent">Subjonctif présent</option>
+                    <option value="Subjonctif passé">Subjonctif passé</option>
+                </select>
+            </div>
+        </div>
+        <div><button type="submit" class="btn">Conjugate</button></div>
     </form>
-</body>
-</html>
+</div>
+{% endblock %}

@@ -1,0 +1,524 @@
+{% extends 'base.html' %}
+
+{% block title %}Roleplay — Conjii{% endblock %}
+
+{% block content %}
+<div class="page">
+    <a href="{{ url_for('roleplay') }}" class="back">&larr; New scenario</a>
+    <p class="eyebrow">iv. Roleplay &middot; {{ 'Scripted' if mode == 'scripted' else 'Unscripted' }}</p>
+    <h2>{{ scenario }}</h2>
+
+    {% if error %}
+        <div class="notice" style="margin-top:32px">{{ error }}</div>
+        <a href="{{ url_for('roleplay') }}" class="btn ghost">Try again</a>
+    {% else %}
+    <div class="stage">
+        <div class="scene">
+            <p>{{ scene.setting }}</p>
+            <div class="roles">You are <strong>{{ scene.user_role }}</strong> &middot; The AI is <strong>{{ scene.ai_role }}</strong></div>
+        </div>
+
+        <div class="notice hidden" id="no-speech" style="margin-top:24px">
+            Your browser doesn't support speech recognition, so you'll need to type your replies. For the full spoken experience, use Chrome, Edge or Safari.
+        </div>
+
+        <div class="stage-bar">
+            <div class="status" id="status"><span class="pulse"></span><span id="status-text">Ready</span></div>
+            <div class="actions">
+                <button class="btn sm" id="start-btn">Begin</button>
+                <button class="btn sm ghost hidden" id="done-btn" title="Send what you've said now">I'm done speaking</button>
+                <button class="btn sm danger hidden" id="stop-btn">Stop</button>
+            </div>
+        </div>
+        {% if mode == 'scripted' %}
+        <div class="progress"><i id="progress"></i></div>
+        {% endif %}
+
+        <div class="chat" id="chat"></div>
+
+        <div id="script-slot"></div>
+
+        {% if mode == 'unscripted' %}
+        <form class="composer hidden" id="composer" autocomplete="off">
+            <input class="input" id="typed" placeholder="Or type your reply in French&hellip;">
+            <button class="btn sm ghost" type="submit">Send</button>
+        </form>
+        {% endif %}
+
+        <div class="summary" id="summary">
+            <p class="eyebrow">Conversation ended</p>
+            <h3 id="summary-title">Bien joué.</h3>
+            <div class="prose" id="summary-body" style="margin-top:16px"></div>
+            <div class="actions" style="margin-top:32px">
+                <a href="{{ url_for('roleplay') }}" class="btn">New scenario</a>
+                <button class="btn ghost" onclick="location.reload()">Restart this one</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if not error %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const CONFIG = {
+    mode: {{ mode|tojson }},
+    scenario: {{ scenario|tojson }},
+    level: {{ level|tojson }},
+    context: {{ context|tojson }},
+    scene: {{ scene|tojson }},
+    script: {{ (script or [])|tojson }},
+    opening: {{ (opening or {})|tojson }},
+    sessionId: {{ session_id|tojson }},
+    chatUrl: "{{ url_for('roleplay_chat') }}",
+    saveUrl: "{{ url_for('roleplay_save') }}"
+};
+
+/* ============================================================
+   Speech helpers: text-to-speech (AI voice) + recognition (you)
+   ============================================================ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const canListen = !!SR;
+function speak(text, rate = 1.0) {
+    return window.ConjiiVoice.speak(text, {
+        rate: rate,
+        slow: rate < 0.86,
+        style: rate < 0.86
+            ? "native French speaker, articulating clearly and slightly slowly for a learner"
+            : "warm, expressive native French speaker in conversation"
+    });
+}
+
+/**
+ * Listen for one turn. Resolves with the final transcript.
+ * Uses continuous mode + a silence timer so pausing to think doesn't cut you off.
+ * onInterim(text) receives live partial transcripts.
+ */
+let recognizer = null;
+let finishTurn = null;  // lets the "I'm done speaking" button end the turn early
+
+function listen(onInterim, silenceMs = 2200) {
+    return new Promise(resolve => {
+        if (!canListen) return resolve("");
+        let finalText = "";
+        let interimText = "";
+        let silenceTimer = null;
+        let settled = false;
+        let restarts = 0;
+
+        const settle = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(silenceTimer);
+            finishTurn = null;
+            try { recognizer && recognizer.abort(); } catch (e) {}
+            recognizer = null;
+            resolve((finalText + " " + interimText).trim());
+        };
+        finishTurn = settle;
+
+        const start = () => {
+            recognizer = new SR();
+            recognizer.lang = "fr-FR";
+            recognizer.continuous = true;
+            recognizer.interimResults = true;
+            recognizer.maxAlternatives = 1;
+
+            recognizer.onresult = e => {
+                interimText = "";
+                for (let i = e.resultIndex; i < e.results.length; i++) {
+                    const t = e.results[i][0].transcript;
+                    if (e.results[i].isFinal) finalText += " " + t;
+                    else interimText += t;
+                }
+                onInterim && onInterim((finalText + " " + interimText).trim());
+                clearTimeout(silenceTimer);
+                silenceTimer = setTimeout(settle, silenceMs);
+            };
+            recognizer.onerror = e => {
+                if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+                    alert("Microphone access was blocked. Allow the mic in your browser to speak, or type instead.");
+                    settle();
+                }
+            };
+            recognizer.onend = () => {
+                // Browser stopped on its own (e.g. long silence). Keep listening unless we're done.
+                if (settled) return;
+                if ((finalText + interimText).trim()) return settle();
+                if (restarts++ < 20) { try { start(); } catch (e) { settle(); } }
+                else settle();
+            };
+            recognizer.start();
+        };
+        start();
+    });
+}
+
+/* ============================================================
+   UI helpers
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const chat = $("chat");
+let active = false;
+const transcript = [];   // [{role: "ai"|"user", text}]
+
+function setStatus(state, text) {
+    $("status").className = "status " + state;
+    $("status-text").textContent = text;
+}
+
+function addMsg(role, fr, en, opts = {}) {
+    const m = document.createElement("div");
+    m.className = "msg " + (role === "ai" ? "ai" : "me") + (opts.interim ? " interim" : "");
+    const who = document.createElement("div");
+    who.className = "who";
+    who.textContent = role === "ai" ? CONFIG.scene.ai_role : "You";
+    const f = document.createElement("div");
+    f.className = "fr";
+    f.textContent = fr;
+    if (role === "ai") {
+        const r = document.createElement("button");
+        r.className = "replay";
+        r.title = "Hear again";
+        r.textContent = "↻";
+        r.onclick = () => speak(fr);
+        f.append(r);
+    }
+    m.append(who, f);
+    if (en) {
+        const e = document.createElement("div");
+        e.className = "en";
+        e.textContent = en;
+        m.append(e);
+    }
+    chat.append(m);
+    m.scrollIntoView({ behavior: "smooth", block: "center" });
+    return m;
+}
+
+function addTip(msgEl, tip) {
+    if (!tip) return;
+    const t = document.createElement("div");
+    t.className = "tip";
+    t.textContent = tip;
+    msgEl.append(t);
+}
+
+function showRunning(running) {
+    $("start-btn").classList.toggle("hidden", running);
+    $("stop-btn").classList.toggle("hidden", !running);
+    $("done-btn").classList.toggle("hidden", !running || !canListen);
+    const comp = $("composer");
+    if (comp) comp.classList.toggle("hidden", !running);
+}
+
+/* ============================================================
+   UNSCRIPTED: open conversation loop until Stop is pressed
+   ============================================================ */
+let typedResolver = null;
+
+async function runUnscripted() {
+    const open = CONFIG.opening;
+    addMsg("ai", open.fr, open.en);
+    transcript.push({ role: "ai", text: open.fr });
+    setStatus("speaking", "Speaking");
+    await speak(open.fr);
+
+    while (active) {
+        // ---- Your turn ----
+        setStatus("listening", canListen ? "Listening — speak in French" : "Your turn — type below");
+        let live = null;
+        const heard = await Promise.race([
+            listen(t => {
+                if (!active) return;
+                if (!live) live = addMsg("user", t, null, { interim: true });
+                else live.querySelector(".fr").textContent = t;
+            }),
+            new Promise(r => typedResolver = r)
+        ]);
+        typedResolver = null;
+        if (finishTurn) finishTurn();     // typed reply: stop the mic
+        if (!active) { if (live) live.remove(); break; }
+
+        if (!heard) { if (live) live.remove(); continue; }   // silence — keep listening
+        if (live) live.remove();
+        const mine = addMsg("user", heard);
+        transcript.push({ role: "user", text: heard });
+
+        // ---- AI's turn ----
+        setStatus("thinking", "Thinking");
+        let reply;
+        try {
+            const res = await fetch(CONFIG.chatUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    scenario: CONFIG.scenario, level: CONFIG.level, context: CONFIG.context,
+                    ai_role: CONFIG.scene.ai_role, user_role: CONFIG.scene.user_role,
+                    history: transcript
+                })
+            });
+            reply = await res.json();
+        } catch (e) {
+            reply = { reply_fr: "Pardon, je n'ai pas bien compris. Vous pouvez répéter ?", reply_en: "Sorry, I didn't catch that. Can you repeat?" };
+        }
+        if (!active) break;
+
+        addTip(mine, reply.correction);
+        addMsg("ai", reply.reply_fr, reply.reply_en);
+        transcript.push({ role: "ai", text: reply.reply_fr });
+        setStatus("speaking", "Speaking");
+        await speak(reply.reply_fr);
+    }
+}
+
+const composer = $("composer");
+if (composer) {
+    composer.addEventListener("submit", e => {
+        e.preventDefault();
+        const v = $("typed").value.trim();
+        if (!v || !typedResolver) return;
+        $("typed").value = "";
+        typedResolver(v);
+    });
+}
+
+/* ============================================================
+   SCRIPTED: read the dialogue aloud and get pronunciation feedback
+   ============================================================ */
+function tokens(s) {
+    return String(s).toLowerCase()
+        .replace(/[’`]/g, "'")
+        .replace(/[.,!?;:«»"()\-–—…]/g, " ")
+        .split(/[\s']+/).filter(Boolean);
+}
+const bare = w => w.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+// Longest-common-subsequence alignment: which target words were heard, in order
+function alignWords(target, heard) {
+    const a = target.map(bare), b = heard.map(bare);
+    const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i--)
+        for (let j = b.length - 1; j >= 0; j--)
+            dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const hit = new Array(a.length).fill(false);
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { hit[i] = true; i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+        else j++;
+    }
+    return hit;
+}
+
+// Render the line as word spans; each span maps to its tokens so we can colour them
+function renderLine(container, text) {
+    container.innerHTML = "";
+    const spans = [];
+    text.split(/(\s+)/).forEach(chunk => {
+        if (/^\s+$/.test(chunk)) { container.append(document.createTextNode(chunk)); return; }
+        const s = document.createElement("span");
+        s.className = "w";
+        s.textContent = chunk;
+        s._tokens = tokens(chunk).length;
+        container.append(s);
+        spans.push(s);
+    });
+    return spans;
+}
+
+const scores = [];
+let lineAction = null;   // resolves the current user line with "next" | "retry"
+
+function updateProgress(i) {
+    const p = $("progress");
+    if (p) p.style.width = (100 * i / CONFIG.script.length) + "%";
+}
+
+async function practiseLine(line) {
+    const slot = $("script-slot");
+    slot.innerHTML = `
+        <div class="script-line">
+            <div class="who">Your line &middot; read aloud</div>
+            <div class="fr"></div>
+            <div class="en"></div>
+            <div class="heard"></div>
+            <div class="actions">
+                <button class="btn sm ghost" data-act="hear">Hear it first</button>
+                <button class="btn sm ghost hidden" data-act="retry">Try again</button>
+                <button class="btn sm" data-act="next">Skip</button>
+            </div>
+        </div>`;
+    const card = slot.firstElementChild;
+    const spans = renderLine(card.querySelector(".fr"), line.fr);
+    card.querySelector(".en").textContent = line.en || "";
+    const heardEl = card.querySelector(".heard");
+    const nextBtn = card.querySelector('[data-act="next"]');
+    const retryBtn = card.querySelector('[data-act="retry"]');
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    let best = 0, bestText = "";
+
+    while (active) {
+        spans.forEach(s => s.classList.remove("hit", "miss"));
+        heardEl.innerHTML = "";
+        retryBtn.classList.add("hidden");
+        setStatus("listening", canListen ? "Listening — read your line" : "Read your line aloud, then continue");
+
+        const userAction = new Promise(r => lineAction = r);
+        card.querySelector('[data-act="hear"]').onclick = () => {
+            lineAction("hear");
+            if (finishTurn) finishTurn();
+        };
+        nextBtn.onclick = () => lineAction("next");
+        retryBtn.onclick = () => lineAction("retry");
+
+        const result = await Promise.race([
+            listen(t => { heardEl.innerHTML = "<b>Heard</b>"; heardEl.append(document.createTextNode(t)); }, 1600)
+                .then(t => ({ heard: t })),
+            userAction.then(a => ({ action: a }))
+        ]);
+        if (finishTurn) finishTurn();
+        if (!active) return null;
+
+        if (result.action === "next") break;
+        if (result.action === "hear") {
+            setStatus("speaking", "Modelling pronunciation");
+            await speak(line.fr, 0.8);
+            continue;
+        }
+        if (result.action === "retry") continue;
+        if (!result.heard) continue;   // silence — listen again
+
+        // Score this attempt
+        const target = tokens(line.fr);
+        const hit = alignWords(target, tokens(result.heard));
+        let k = 0;
+        spans.forEach(s => {
+            const slice = hit.slice(k, k + s._tokens);
+            k += s._tokens;
+            if (s._tokens) s.classList.add(slice.every(Boolean) ? "hit" : "miss");
+        });
+        const pct = target.length ? Math.round(100 * hit.filter(Boolean).length / target.length) : 100;
+        if (pct >= best) { best = pct; bestText = result.heard; }
+
+        heardEl.innerHTML = "";
+        const acc = document.createElement("span");
+        acc.className = "accuracy";
+        acc.textContent = pct + "%";
+        heardEl.append(acc, document.createTextNode("  ·  "));
+        const b = document.createElement("b"); b.textContent = "Heard";
+        heardEl.append(b, document.createTextNode(result.heard));
+
+        nextBtn.textContent = "Continue";
+        retryBtn.classList.remove("hidden");
+        setStatus("", pct >= 80 ? "Très bien !" : pct >= 50 ? "Close — try again or continue" : "Try again, slowly");
+
+        if (pct >= 80) {
+            // Great attempt: move on automatically after a beat (user can still retry)
+            const a = await Promise.race([
+                new Promise(r => lineAction = r),
+                new Promise(r => setTimeout(() => r("next"), 1800))
+            ]);
+            if (a === "retry") continue;
+            if (a === "hear") { await speak(line.fr, 0.8); continue; }
+            break;
+        }
+        const a = await new Promise(r => lineAction = r);
+        if (a === "next") break;
+        if (a === "hear") { setStatus("speaking", "Modelling pronunciation"); await speak(line.fr, 0.8); }
+    }
+
+    slot.innerHTML = "";
+    return { best, bestText };
+}
+
+async function runScripted() {
+    for (let i = 0; i < CONFIG.script.length && active; i++) {
+        updateProgress(i);
+        const line = CONFIG.script[i];
+        if (line.speaker === "ai") {
+            addMsg("ai", line.fr, line.en);
+            transcript.push({ role: "ai", text: line.fr });
+            setStatus("speaking", "Speaking");
+            await speak(line.fr);
+        } else {
+            const r = await practiseLine(line);
+            if (!r) break;
+            const m = addMsg("user", line.fr, null);
+            if (r.bestText) addTip(m, r.best + "% match");
+            else addTip(m, "Skipped");
+            scores.push(r.best);
+            transcript.push({ role: "user", text: r.bestText || "(skipped) " + line.fr });
+        }
+    }
+    updateProgress(CONFIG.script.length);
+    if (active) stop();
+}
+
+/* ============================================================
+   Start / stop
+   ============================================================ */
+async function start() {
+    active = true;
+    showRunning(true);
+    window.ConjiiVoice.stop();
+    if (CONFIG.mode === "scripted") await runScripted();
+    else await runUnscripted();
+}
+
+async function stop() {
+    if (!active && $("summary").classList.contains("show")) return;
+    active = false;
+    window.ConjiiVoice.stop();
+    if (finishTurn) finishTurn();
+    if (typedResolver) typedResolver("");
+    if (lineAction) lineAction("next");
+    showRunning(false);
+    $("start-btn").classList.add("hidden");
+    $("script-slot").innerHTML = "";
+    setStatus("", "Ended");
+
+    const summary = $("summary");
+    const body = $("summary-body");
+    summary.classList.add("show");
+
+    if (CONFIG.mode === "scripted") {
+        const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+        $("summary-title").textContent = scores.length ? `Average pronunciation match: ${avg}%` : "Bien joué.";
+        body.textContent = scores.length
+            ? "Words marked in red were not recognised — try those lines again, slowly and clearly."
+            : "";
+    } else {
+        body.innerHTML = '<p class="muted">Preparing a little feedback&hellip;</p>';
+    }
+    summary.scrollIntoView({ behavior: "smooth" });
+
+    try {
+        const res = await fetch(CONFIG.saveUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                session_id: CONFIG.sessionId, mode: CONFIG.mode, scenario: CONFIG.scenario,
+                level: CONFIG.level, history: transcript, want_feedback: CONFIG.mode === "unscripted"
+            })
+        });
+        const data = await res.json();
+        if (CONFIG.mode === "unscripted") {
+            body.innerHTML = data.feedback ? marked.parse(data.feedback) : "<p>Conversation saved.</p>";
+        }
+    } catch (e) {
+        if (CONFIG.mode === "unscripted") body.innerHTML = "<p>Conversation ended.</p>";
+    }
+}
+
+$("start-btn").addEventListener("click", start);
+$("stop-btn").addEventListener("click", stop);
+$("done-btn").addEventListener("click", () => { if (finishTurn) finishTurn(); });
+
+if (!canListen) $("no-speech").classList.remove("hidden");
+</script>
+{% endif %}
+{% endblock %}
